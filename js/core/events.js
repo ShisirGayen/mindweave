@@ -226,3 +226,102 @@ export function getStateInfo() {
     persistent: isPersistent()
   };
       }
+// © Shisir Gayen. All rights reserved.
+// MINDWEAVE - Central Event Management System
+
+const events = new Map();
+
+let eventId = 0;
+
+// Register an event listener
+export function on(eventName, callback) {
+  if (typeof eventName !== 'string' || !eventName.trim()) {
+    throw new TypeError('Invalid event name');
+  }
+
+  if (typeof callback !== 'function') {
+    throw new TypeError('Callback must be a function');
+  }
+
+  if (!events.has(eventName)) {
+    events.set(eventName, new Map());
+  }
+
+  const id = ++eventId;
+
+  events.get(eventName).set(id, callback);
+
+  return () => off(eventName, id);
+}
+
+// Remove an event listener
+export function off(eventName, id) {
+  const listeners = events.get(eventName);
+
+  if (!listeners) return false;
+
+  const removed = listeners.delete(id);
+
+  if (listeners.size === 0) {
+    events.delete(eventName);
+  }
+
+  return removed;
+}
+
+// Emit an event
+export function emit(eventName, payload = null) {
+  const listeners = events.get(eventName);
+
+  if (!listeners) return 0;
+
+  const callbacks = [...listeners.values()];
+  let executed = 0;
+
+  for (const callback of callbacks) {
+    try {
+      callback(payload);
+      executed++;
+    } catch (error) {
+      console.error(
+        `[MINDWEAVE] Event error: ${eventName}`,
+        error
+      );
+    }
+  }
+
+  return executed;
+}
+
+// Register a listener that runs only once
+export function once(eventName, callback) {
+  let unsubscribe;
+
+  unsubscribe = on(eventName, (payload) => {
+    unsubscribe();
+    callback(payload);
+  });
+
+  return unsubscribe;
+}
+
+// Remove all listeners for an event
+export function clear(eventName) {
+  if (eventName === undefined) {
+    events.clear();
+    return;
+  }
+
+  events.delete(eventName);
+}
+
+// Get event listener count
+export function listenerCount(eventName) {
+  return events.get(eventName)?.size ?? 0;
+}
+
+// Get registered event names
+export function getEventNames() {
+  return [...events.keys()];
+}
+
