@@ -1,15 +1,6 @@
 
 // © Shisir Gayen. All rights reserved.
 // MINDWEAVE — Character Data Model
-// The Hidden Rules of a Living World.
-//
-// Core Rules:
-// 1. startAge is permanent after character creation.
-// 2. currentAge can only change through withAge().
-// 3. Character ages must remain within MIN_AGE and MAX_AGE.
-// 4. Secret reward eligibility depends only on startAge.
-// 5. Eligible starting age: 1–18.
-// 6. Character data must remain JSON-serializable.
 
 export const MIN_AGE = 0;
 export const MAX_AGE = 100;
@@ -17,10 +8,7 @@ export const MAX_AGE = 100;
 export const REWARD_MIN_START_AGE = 1;
 export const REWARD_MAX_START_AGE = 18;
 
-// --------------------------------------------------
-// BASIC VALIDATION
-// --------------------------------------------------
-
+// Basic validation
 export const isValidAge = (age) =>
   Number.isInteger(age) &&
   age >= MIN_AGE &&
@@ -34,10 +22,7 @@ const isObject = (value) =>
   typeof value === 'object' &&
   !Array.isArray(value);
 
-// --------------------------------------------------
-// CHARACTER ID GENERATION
-// --------------------------------------------------
-
+// ID generation
 function makeId() {
   try {
     if (
@@ -47,7 +32,7 @@ function makeId() {
       return globalThis.crypto.randomUUID();
     }
   } catch {
-    // Use fallback ID generation.
+    // Fallback
   }
 
   return (
@@ -57,13 +42,7 @@ function makeId() {
   );
 }
 
-// --------------------------------------------------
-// INTERNAL CHARACTER FACTORY
-// --------------------------------------------------
-
-// Creates a character with protected age properties.
-// Both properties remain enumerable for JSON serialization.
-
+// Internal protected character factory
 function buildCharacter({
   id,
   startAge,
@@ -73,6 +52,8 @@ function buildCharacter({
 }) {
   const character = {
     id,
+    startAge,
+    currentAge,
     createdAt,
     lastProgressAt
   };
@@ -96,10 +77,7 @@ function buildCharacter({
   return character;
 }
 
-// --------------------------------------------------
-// CHARACTER CREATION
-// --------------------------------------------------
-
+// Character creation
 export function createCharacter(startAge, now = Date.now()) {
   if (!isValidAge(startAge)) {
     throw new RangeError(
@@ -109,7 +87,7 @@ export function createCharacter(startAge, now = Date.now()) {
 
   if (!isValidTimestamp(now)) {
     throw new RangeError(
-      'Creation timestamp must be a valid non-negative number.'
+      'Invalid creation timestamp.'
     );
   }
 
@@ -122,13 +100,7 @@ export function createCharacter(startAge, now = Date.now()) {
   });
 }
 
-// --------------------------------------------------
-// CHARACTER SANITIZATION
-// --------------------------------------------------
-
-// Returns a clean and protected character object.
-// Returns null if the starting age is invalid.
-
+// Character sanitization
 export function sanitizeCharacter(raw) {
   if (!isObject(raw)) {
     return null;
@@ -140,26 +112,22 @@ export function sanitizeCharacter(raw) {
 
   const startAge = raw.startAge;
 
-  // Repair invalid or inconsistent current age.
   const currentAge =
     isValidAge(raw.currentAge) &&
     raw.currentAge >= startAge
       ? raw.currentAge
       : startAge;
 
-  // Repair invalid creation timestamp.
   const createdAt = isValidTimestamp(raw.createdAt)
     ? raw.createdAt
     : Date.now();
 
-  // Progress timestamp cannot precede creation.
   const lastProgressAt =
     isValidTimestamp(raw.lastProgressAt) &&
     raw.lastProgressAt >= createdAt
       ? raw.lastProgressAt
       : createdAt;
 
-  // Preserve valid IDs and repair invalid ones.
   const id =
     typeof raw.id === 'string' &&
     raw.id.trim().length > 0
@@ -175,23 +143,12 @@ export function sanitizeCharacter(raw) {
   });
 }
 
-// --------------------------------------------------
-// CHARACTER AGE PROGRESSION
-// --------------------------------------------------
-
-// Returns a NEW character object.
-// The original character remains unchanged.
-//
-// Age cannot decrease.
-// Age cannot exceed MAX_AGE.
-// Age cannot change outside this function.
-
+// Age progression
 export function withAge(character, newAge, now = Date.now()) {
   if (!isObject(character)) {
     return character;
   }
 
-  // Validate existing character age data.
   if (
     !isValidAge(character.startAge) ||
     !isValidAge(character.currentAge) ||
@@ -200,7 +157,6 @@ export function withAge(character, newAge, now = Date.now()) {
     return character;
   }
 
-  // Validate progression timestamp data.
   if (
     !isValidTimestamp(character.createdAt) ||
     !isValidTimestamp(character.lastProgressAt) ||
@@ -209,22 +165,18 @@ export function withAge(character, newAge, now = Date.now()) {
     return character;
   }
 
-  // Validate the requested age.
   if (!isValidAge(newAge)) {
     return character;
   }
 
-  // Prevent age regression.
   if (newAge < character.currentAge) {
     return character;
   }
 
-  // No unnecessary update.
   if (newAge === character.currentAge) {
     return character;
   }
 
-  // Validate progression time.
   if (
     !isValidTimestamp(now) ||
     now < character.lastProgressAt
@@ -232,7 +184,6 @@ export function withAge(character, newAge, now = Date.now()) {
     return character;
   }
 
-  // Return a new protected character.
   return buildCharacter({
     id: character.id,
     startAge: character.startAge,
@@ -242,19 +193,7 @@ export function withAge(character, newAge, now = Date.now()) {
   });
 }
 
-// --------------------------------------------------
-// SECRET REWARD ELIGIBILITY
-// --------------------------------------------------
-
-// Secret reward eligibility is based on ORIGINAL starting age.
-// Current age never affects this eligibility.
-//
-// Eligible: 1–18
-// Ineligible: 0 and 19–100
-//
-// This function does not expose reward information
-// through the game interface.
-
+// Secret reward eligibility
 export const isRewardEligible = (character) => {
   if (!isObject(character)) {
     return false;
