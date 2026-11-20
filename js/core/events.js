@@ -1,4 +1,3 @@
-
 // © Shisir Gayen. All rights reserved.
 // MINDWEAVE - Central Event Management System
 
@@ -126,4 +125,4 @@ export function listenerCount(eventName) {
 // Get all registered event names
 export function getEventNames() {
   return [...events.keys()];
-      }
+}
