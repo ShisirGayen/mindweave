@@ -10,8 +10,7 @@ import {
 } from './state.js';
 
 import {
-  emit,
-  clear
+  emit
 } from './events.js';
 
 // ------------------------------------
@@ -67,7 +66,10 @@ export function initializeGame(customStorage) {
     };
 
   } catch (error) {
-    console.error('[MINDWEAVE] Initialization failed:', error);
+    console.error(
+      '[MINDWEAVE] Initialization failed:',
+      error
+    );
 
     return {
       ok: false,
@@ -82,7 +84,9 @@ export function initializeGame(customStorage) {
 
 export function startGame() {
   if (!initialized) {
-    throw new Error('Initialize game before starting');
+    throw new Error(
+      'Initialize game before starting'
+    );
   }
 
   if (status === STATUS.RUNNING) {
@@ -139,7 +143,9 @@ export function resumeGame() {
 // ------------------------------------
 
 export function stopGame() {
-  if (!initialized) return false;
+  if (!initialized) {
+    return false;
+  }
 
   const saveResult = saveState();
 
@@ -158,7 +164,9 @@ export function stopGame() {
 
 export function getGameState() {
   if (!initialized) {
-    throw new Error('Game is not initialized');
+    throw new Error(
+      'Game is not initialized'
+    );
   }
 
   return getState();
@@ -166,7 +174,9 @@ export function getGameState() {
 
 export function modifyGameState(updater) {
   if (!initialized) {
-    throw new Error('Game is not initialized');
+    throw new Error(
+      'Game is not initialized'
+    );
   }
 
   return updateState(updater);
@@ -193,24 +203,34 @@ export function isGameInitialized() {
 // ------------------------------------
 
 export function shutdownGame() {
-  if (!initialized) return false;
+  if (!initialized) {
+    return false;
+  }
 
   const saved = saveState();
+
+  status = STATUS.STOPPED;
+
+  // Notify listeners before disconnecting the state subscription.
+  emit('game:shutdown', {
+    save: saved
+  });
 
   if (unsubscribeState) {
     unsubscribeState();
     unsubscribeState = null;
   }
 
-  clear();
-
-  status = STATUS.STOPPED;
   initialized = false;
 
-  emit('game:shutdown');
+  // Do not clear the global event system.
+  // Other modules may still depend on registered listeners.
 
   return saved.ok;
 }
 
+// ------------------------------------
+// EXPORTS
+// ------------------------------------
+
 export { STATUS };
-    
