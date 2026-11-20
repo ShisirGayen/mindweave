@@ -37,7 +37,7 @@ function notifySubscribers(metadata = {}) {
 
   for (const callback of [...subscribers]) {
     try {
-      callback(snapshot, metadata);
+      callback(cloneState(snapshot), metadata);
     } catch (error) {
       console.error(
         '[MINDWEAVE] State subscriber error:',
@@ -171,7 +171,8 @@ export function replaceState(newState, metadata = {}) {
   notifySubscribers({
     ...metadata,
     replaced: true,
-    repaired: validation.repaired
+    repaired: validation.repaired,
+    migrated: validation.migrated
   });
 
   return getState();
@@ -257,4 +258,5 @@ export function getStateInfo() {
     persistent: isPersistent(),
     notice: storageNotice
   };
-        }
+    }
+      
