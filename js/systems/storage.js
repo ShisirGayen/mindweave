@@ -103,16 +103,35 @@ function storageFailure(error) {
 // SAFE READ / WRITE
 // ------------------------------------
 
-function read(key) {
+function readResult(key) {
   if (!store) {
-    return null;
+    return {
+      ok: false,
+      value: null,
+      reason: 'unavailable'
+    };
   }
 
   try {
-    return store.getItem(key);
+    return {
+      ok: true,
+      value: store.getItem(key)
+    };
   } catch {
-    return null;
+    return {
+      ok: false,
+      value: null,
+      reason: 'error'
+    };
   }
+}
+
+function read(key) {
+  const result = readResult(key);
+
+  return result.ok
+    ? result.value
+    : null;
 }
 
 function write(key, value) {
@@ -157,6 +176,32 @@ function parse(raw) {
 }
 
 // ------------------------------------
+// NORMALIZED SAVE WRITER
+// ------------------------------------
+
+function writeNormalized(state) {
+  let serialized;
+
+  try {
+    serialized = JSON.stringify(state);
+  } catch {
+    return {
+      ok: false,
+      reason: 'serialization'
+    };
+  }
+
+  if (typeof serialized !== 'string') {
+    return {
+      ok: false,
+      reason: 'serialization'
+    };
+  }
+
+  return write(KEYS.main, serialized);
+}
+
+// ------------------------------------
 // INITIALIZE STORAGE
 // ------------------------------------
 
@@ -181,44 +226,151 @@ export function init(custom) {
     persistent = detected.persistent;
   }
 
-  const raw = read(KEYS.main);
+  // Read main save.
+  const mainRead = readResult(KEYS.main);
+
+  if (!mainRead.ok) {
+    return {
+      state: defaultState(),
+      notice: 'storage-read-error'
+    };
+  }
+
+  const raw = mainRead.value;
+
+  // ----------------------------------
+  // MAIN SAVE DOES NOT EXIST
+  // ----------------------------------
 
   if (raw === null) {
+    const backupRead = readResult(KEYS.backup);
+
+    if (!backupRead.ok) {
+      return {
+        state: defaultState(),
+        notice: 'storage-read-error'
+      };
+    }
+
+    // Try recovering from an existing backup.
+    if (backupRead.value !== null) {
+      const backup = parse(backupRead.value);
+
+      if (backup.ok) {
+        const saved = persist(backup.state);
+
+        return {
+          state: backup.state,
+          notice: saved.ok
+            ? 'recovered-backup'
+            : 'recovered-backup-unsaved'
+        };
+      }
+
+      return {
+        state: defaultState(),
+        notice: 'corrupt-reset'
+      };
+    }
+
     return {
       state: defaultState(),
       notice: persistent ? null : 'no-storage'
     };
   }
 
+  // ----------------------------------
+  // VALIDATE MAIN SAVE
+  // ----------------------------------
+
   const main = parse(raw);
 
   if (main.ok) {
+    // Persist repaired or migrated state.
+    if (main.repaired || main.migrated) {
+      const saved = persist(main.state);
+
+      let notice = null;
+
+      if (!saved.ok) {
+        notice = main.migrated
+          ? 'migration-unsaved'
+          : 'repair-unsaved';
+      } else {
+        notice = main.repaired
+          ? 'repaired'
+          : 'migrated';
+      }
+
+      return {
+        state: main.state,
+        notice
+      };
+    }
+
     return {
       state: main.state,
-      notice: main.repaired
-        ? 'repaired'
-        : null
+      notice: null
     };
   }
 
-  // Preserve unreadable save before recovery.
-  write(KEYS.unreadable, raw);
+  // ----------------------------------
+  // NEWER VERSION PROTECTION
+  // ----------------------------------
 
-  // Attempt backup recovery.
-  const backup = parse(read(KEYS.backup));
+  // Never replace a save created by a newer game version.
+  if (main.reason === 'newer-version') {
+    return {
+      state: defaultState(),
+      notice: 'newer-version'
+    };
+  }
+
+  // ----------------------------------
+  // PRESERVE UNREADABLE SAVE
+  // ----------------------------------
+
+  const unreadableResult = write(
+    KEYS.unreadable,
+    raw
+  );
+
+  // ----------------------------------
+  // BACKUP RECOVERY
+  // ----------------------------------
+
+  const backupRead = readResult(KEYS.backup);
+
+  if (!backupRead.ok) {
+    return {
+      state: defaultState(),
+      notice: 'storage-read-error'
+    };
+  }
+
+  const backup = parse(backupRead.value);
 
   if (backup.ok) {
+    // Restore recovered data to the main save.
+    const restored = persist(backup.state);
+
+    let notice = restored.ok
+      ? 'recovered-backup'
+      : 'recovered-backup-unsaved';
+
+    if (!unreadableResult.ok) {
+      notice = 'recovered-backup-unsaved';
+    }
+
     return {
       state: backup.state,
-      notice: 'recovered-backup'
+      notice
     };
   }
 
   return {
     state: defaultState(),
-    notice: main.reason === 'newer-version'
-      ? 'newer-version'
-      : 'corrupt-reset'
+    notice: 'corrupt-reset'
   };
 }
 
@@ -236,20 +388,48 @@ export function persist(state) {
     };
   }
 
-  const previous = read(KEYS.main);
+  const previousRead = readResult(KEYS.main);
 
-  // Keep the previous valid save as backup.
+  if (!previousRead.ok) {
+    return {
+      ok: false,
+      reason: 'read-error'
+    };
+  }
+
+  const previous = previousRead.value;
+
+  // Preserve the previous save before replacing it.
   if (previous !== null) {
     const parsedPrevious = parse(previous);
 
     if (parsedPrevious.ok) {
-      write(KEYS.backup, previous);
+      // Keep the previous valid save as backup.
+      const backupResult = write(
+        KEYS.backup,
+        previous
+      );
+
+      // Do not overwrite main if backup preservation fails.
+      if (!backupResult.ok) {
+        return backupResult;
+      }
+    } else {
+      // Preserve invalid or unreadable data separately.
+      const unreadableResult = write(
+        KEYS.unreadable,
+        previous
+      );
+
+      if (!unreadableResult.ok) {
+        return unreadableResult;
+      }
     }
   }
 
-  const result = write(
-    KEYS.main,
-    JSON.stringify(validation.state)
+  // Write the validated, normalized state.
+  const result = writeNormalized(
+    validation.state
   );
 
   if (!result.ok) {
@@ -282,23 +462,47 @@ export function archiveSave(state) {
     };
   }
 
+  let serialized;
+
+  try {
+    serialized = JSON.stringify(validation.state);
+  } catch {
+    return {
+      ok: false,
+      reason: 'serialization'
+    };
+  }
+
+  if (typeof serialized !== 'string') {
+    return {
+      ok: false,
+      reason: 'serialization'
+    };
+  }
+
   return write(
     KEYS.archive,
-    JSON.stringify(validation.state)
+    serialized
   );
 }
 
 export function readArchive() {
-  const result = parse(read(KEYS.archive));
+  const result = readResult(KEYS.archive);
+
+  if (!result.ok) {
+    return null;
+  }
+
+  const parsed = parse(result.value);
 
   if (
-    !result.ok ||
-    !result.state.character
+    !parsed.ok ||
+    !parsed.state.character
   ) {
     return null;
   }
 
-  return result.state;
+  return parsed.state;
 }
 
 export function clearArchive() {
@@ -325,4 +529,4 @@ export function clearAll() {
       // Continue clearing remaining keys.
     }
   }
-}
+        }
