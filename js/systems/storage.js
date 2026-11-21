@@ -396,7 +396,7 @@ export function persist(state) {
   }
 
   // ----------------------------------
-  // BACKUP VERSION PROTECTION
+  // STRICT BACKUP PROTECTION
   // ----------------------------------
 
   // Read backup before any operation that
@@ -419,6 +419,15 @@ export function persist(state) {
       return {
         ok: false,
         reason: 'newer-version'
+      };
+    }
+
+    // Never overwrite an existing backup
+    // that cannot be validated.
+    if (!parsedBackup.ok) {
+      return {
+        ok: false,
+        reason: 'backup-invalid'
       };
     }
   }
@@ -577,4 +586,4 @@ export function clearAll() {
       // Continue clearing remaining keys.
     }
   }
-    }
+        }
