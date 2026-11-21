@@ -126,14 +126,6 @@ function readResult(key) {
   }
 }
 
-function read(key) {
-  const result = readResult(key);
-
-  return result.ok
-    ? result.value
-    : null;
-}
-
 function write(key, value) {
   if (!store) {
     return {
@@ -252,9 +244,15 @@ export function init(custom) {
       };
     }
 
-    // Try recovering from an existing backup.
     if (backupRead.value !== null) {
       const backup = parse(backupRead.value);
+
+      if (backup.reason === 'newer-version') {
+        return {
+          state: defaultState(),
+          notice: 'newer-version'
+        };
+      }
 
       if (backup.ok) {
         const saved = persist(backup.state);
@@ -286,7 +284,6 @@ export function init(custom) {
   const main = parse(raw);
 
   if (main.ok) {
-    // Persist repaired or migrated state.
     if (main.repaired || main.migrated) {
       const saved = persist(main.state);
 
@@ -318,7 +315,6 @@ export function init(custom) {
   // NEWER VERSION PROTECTION
   // ----------------------------------
 
-  // Never replace a save created by a newer game version.
   if (main.reason === 'newer-version') {
     return {
       state: defaultState(),
@@ -350,27 +346,36 @@ export function init(custom) {
 
   const backup = parse(backupRead.value);
 
+  if (backup.reason === 'newer-version') {
+    return {
+      state: defaultState(),
+      notice: 'newer-version'
+    };
+  }
+
   if (backup.ok) {
-    // Restore recovered data to the main save.
     const restored = persist(backup.state);
 
-    let notice = restored.ok
-      ? 'recovered-backup'
-      : 'recovered-backup-unsaved';
-
-    if (!unreadableResult.ok) {
-      notice = 'recovered-backup-unsaved';
+    if (!restored.ok) {
+      return {
+        state: backup.state,
+        notice: 'recovered-backup-unsaved'
+      };
     }
 
     return {
       state: backup.state,
-      notice
+      notice: unreadableResult.ok
+        ? 'recovered-backup'
+        : 'recovered-backup-unreadable-unsaved'
     };
   }
 
   return {
     state: defaultState(),
-    notice: 'corrupt-reset'
+    notice: unreadableResult.ok
+      ? 'corrupt-reset'
+      : 'corrupt-reset-unreadable-unsaved'
   };
 }
 
@@ -384,7 +389,9 @@ export function persist(state) {
   if (!validation.ok) {
     return {
       ok: false,
-      reason: 'invalid-state'
+      reason: validation.reason === 'newer-version'
+        ? 'newer-version'
+        : 'invalid-state'
     };
   }
 
@@ -399,23 +406,29 @@ export function persist(state) {
 
   const previous = previousRead.value;
 
-  // Preserve the previous save before replacing it.
   if (previous !== null) {
     const parsedPrevious = parse(previous);
 
+    // Never overwrite a save from a newer schema.
+    if (parsedPrevious.reason === 'newer-version') {
+      return {
+        ok: false,
+        reason: 'newer-version'
+      };
+    }
+
     if (parsedPrevious.ok) {
-      // Keep the previous valid save as backup.
+      // Preserve the previous valid save as backup.
       const backupResult = write(
         KEYS.backup,
         previous
       );
 
-      // Do not overwrite main if backup preservation fails.
       if (!backupResult.ok) {
         return backupResult;
       }
     } else {
-      // Preserve invalid or unreadable data separately.
+      // Preserve invalid data before replacing main.
       const unreadableResult = write(
         KEYS.unreadable,
         previous
@@ -427,7 +440,6 @@ export function persist(state) {
     }
   }
 
-  // Write the validated, normalized state.
   const result = writeNormalized(
     validation.state
   );
@@ -529,4 +541,4 @@ export function clearAll() {
       // Continue clearing remaining keys.
     }
   }
-        }
+}
