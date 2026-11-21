@@ -395,6 +395,38 @@ export function persist(state) {
     };
   }
 
+  // ----------------------------------
+  // BACKUP VERSION PROTECTION
+  // ----------------------------------
+
+  // Read backup before any operation that
+  // could replace it with the previous main save.
+
+  const backupRead = readResult(KEYS.backup);
+
+  if (!backupRead.ok) {
+    return {
+      ok: false,
+      reason: 'read-error'
+    };
+  }
+
+  if (backupRead.value !== null) {
+    const parsedBackup = parse(backupRead.value);
+
+    // Never overwrite a backup from a newer schema.
+    if (parsedBackup.reason === 'newer-version') {
+      return {
+        ok: false,
+        reason: 'newer-version'
+      };
+    }
+  }
+
+  // ----------------------------------
+  // MAIN SAVE PROTECTION
+  // ----------------------------------
+
   const previousRead = readResult(KEYS.main);
 
   if (!previousRead.ok) {
@@ -409,7 +441,7 @@ export function persist(state) {
   if (previous !== null) {
     const parsedPrevious = parse(previous);
 
-    // Never overwrite a save from a newer schema.
+    // Never overwrite a main save from a newer schema.
     if (parsedPrevious.reason === 'newer-version') {
       return {
         ok: false,
@@ -439,6 +471,10 @@ export function persist(state) {
       }
     }
   }
+
+  // ----------------------------------
+  // WRITE NORMALIZED STATE
+  // ----------------------------------
 
   const result = writeNormalized(
     validation.state
@@ -541,4 +577,4 @@ export function clearAll() {
       // Continue clearing remaining keys.
     }
   }
-}
+    }
