@@ -788,3 +788,109 @@ body::before {
   }
   }
   
+/* CHARACTER CREATION FORM */
+
+.character-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 26px;
+}
+
+.character-form label {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.character-form input {
+  width: 100%;
+  min-height: 50px;
+  padding: 0 15px;
+  border: 1px solid rgba(142, 190, 220, 0.28);
+  border-radius: 9px;
+  outline: none;
+  background: #0a1423;
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.character-form input:hover {
+  border-color: rgba(84, 230, 245, 0.55);
+}
+
+.character-form input:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px rgba(84, 230, 245, 0.12);
+}
+
+.form-hint {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.character-form .primary-button {
+  width: 100%;
+  min-height: 50px;
+  margin-top: 8px;
+}
+
+.character-form .primary-button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.form-error {
+  min-height: 0;
+  color: #ff9292;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.form-error:empty {
+  display: none;
+}
+
+/* DIALOG AND MOBILE SUPPORT */
+
+#game-dialog {
+  max-height: min(85vh, 760px);
+  overscroll-behavior: contain;
+}
+
+.dialog-content {
+  padding: clamp(26px, 6vw, 42px) clamp(20px, 5vw, 30px);
+}
+
+.dialog-content h2 {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  #game-dialog {
+    width: calc(100% - 24px);
+    max-height: 88vh;
+    border-radius: 14px;
+  }
+
+  .dialog-content {
+    padding: 38px 20px 24px;
+  }
+
+  .dialog-content h2 {
+    font-size: 20px;
+  }
+
+  .character-form {
+    gap: 10px;
+    margin-top: 22px;
+  }
+
+  .character-form input {
+    min-height: 48px;
+  }
+}
+
